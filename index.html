@@ -66,7 +66,7 @@
         <div class="sort-group">
           <label>
             Sort by
-            <select v-model="sortBy">
+            <select v-model="sortBy" @change="logSortChange">
               <option value="topic">Subject</option>
               <option value="location">Location</option>
               <option value="price">Price</option>
@@ -76,7 +76,7 @@
 
           <label>
             Order
-            <select v-model="sortOrder">
+            <select v-model="sortOrder" @change="logSortOrderChange">
               <option value="asc">Ascending</option>
               <option value="desc">Descending</option>
             </select>
@@ -395,7 +395,7 @@
           Add lessons to your cart and complete checkout.
           Your purchased lessons will appear here.
         </p>
-        <button @click="showEnrolments = false">
+        <button @click="backToLessons">
           Browse Lessons
         </button>
       </div>
