@@ -1,16 +1,27 @@
 # CST3144 Vue 3 Front End
 
-Simple Vue 3 front end for an after-school lessons web application.
+Simple Vue 3 front end for the AfterClass after-school lessons web application.
+
+## Live links
+
+- Frontend: https://lvish10.github.io/CST3144/
+- Backend API: https://m01016510-after-school.onrender.com
+- Lessons API: https://m01016510-after-school.onrender.com/lessons
+- Frontend repository: https://github.com/Lvish10/CST3144
+- Backend repository: https://github.com/Lvish10/CST3144-Backend
 
 ## Stack
+
 - Vue 3
 - Native fetch()
 - GitHub Pages
-- Separate Node.js + Express backend
+- Node.js + Express backend on Render
 - MongoDB Atlas through the backend
 
-## Local
-Run the backend on port 3000 and open index.html with VS Code Live Server.
+## Local development
 
-## Deployment
-Replace YOUR-STUDENT-NUMBER in app.js with the exact Render service address before enabling GitHub Pages.
+Run the backend locally on port 3000 and open index.html with VS Code Live Server.
+
+The frontend automatically uses:
+- http://localhost:3000 when opened locally
+- https://m01016510-after-school.onrender.com when hosted on GitHub Pages
