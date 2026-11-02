@@ -14,16 +14,32 @@
       <h1 v-once>AfterClass</h1>
       <p>After-school lessons & activities</p>
     </div>
-    <button class="cart-button" @click="toggleCart" :disabled="cart.length === 0">
-      {{ showCart ? 'Back to lessons' : `Cart (${cart.length})` }}
-    </button>
+
+    <div class="top-actions">
+      <button
+        class="secondary light-button"
+        @click="toggleEnrolments"
+      >
+        {{ showEnrolments ? 'Back to lessons' : `My Enrolments (${myEnrolmentCount})` }}
+      </button>
+
+      <button
+        class="cart-button"
+        @click="toggleCart"
+        :disabled="cart.length === 0"
+      >
+        {{ showCart ? 'Back to lessons' : `Cart (${cart.length})` }}
+      </button>
+    </div>
   </header>
 
   <main class="container">
-    <section v-if="!showCart">
+
+    <!-- MAIN LESSON PAGE -->
+    <section v-if="!showCart && !showEnrolments">
       <div class="intro-card">
         <h2>Find your lesson</h2>
-        <p>Search, sort, check availability, view teachers and see current enrolment.</p>
+        <p>Search, sort, choose a teacher, check enrolment and apply for a lesson.</p>
       </div>
 
       <div class="controls">
@@ -36,8 +52,15 @@
               placeholder="Try Math, Hendon, 100 or 5..."
             >
           </label>
+
           <button @click="searchLessons">Search</button>
-          <button class="secondary" @click="clearSearch" :disabled="!searchText">Clear</button>
+          <button
+            class="secondary"
+            @click="clearSearch"
+            :disabled="!searchText"
+          >
+            Clear
+          </button>
         </div>
 
         <div class="sort-group">
@@ -62,8 +85,8 @@
       </div>
 
       <div class="challenge-note">
-        <strong>Server-side search:</strong>
-        one search box checks subject, location, price and availability through the Express REST API.
+        <strong>Search challenge:</strong>
+        one search box checks subject, location, price and availability on the Express/MongoDB backend.
       </div>
 
       <p class="status" v-if="loading">Loading...</p>
@@ -71,8 +94,16 @@
       <p class="result-count" v-if="!loading">{{ sortedLessons.length }} lesson(s) shown</p>
 
       <div class="lesson-grid">
-        <article class="lesson-card" v-for="lesson in sortedLessons" :key="lesson._id">
-          <img :src="imageUrl(lesson.image)" :alt="lesson.topic">
+        <article
+          class="lesson-card"
+          v-for="lesson in sortedLessons"
+          :key="lesson._id"
+        >
+          <img
+            :src="imageUrl(lesson.image)"
+            :alt="lesson.topic"
+          >
+
           <div class="lesson-body">
             <div class="card-heading">
               <h2>{{ lesson.topic }}</h2>
@@ -82,15 +113,26 @@
             <p><strong>Location:</strong> {{ lesson.location }}</p>
             <p><strong>Price:</strong> £{{ lesson.price }}</p>
 
-            <div class="enrolment-box" v-if="enrolment[lesson._id] !== undefined">
-              <strong>Purchased spaces:</strong> {{ enrolment[lesson._id] }}
+            <div
+              class="enrolment-box"
+              v-if="enrolment[lesson._id] !== undefined"
+            >
+              <strong>Purchased spaces:</strong>
+              {{ enrolment[lesson._id] }}
             </div>
 
             <div class="card-actions">
-              <button @click="addToCart(lesson)" :disabled="lesson.space <= 0">
+              <button
+                @click="addToCart(lesson)"
+                :disabled="lesson.space <= 0"
+              >
                 {{ lesson.space > 0 ? 'Add to Cart' : 'Sold Out' }}
               </button>
-              <button class="secondary" @click="loadEnrolment(lesson._id)">
+
+              <button
+                class="secondary"
+                @click="loadEnrolment(lesson._id)"
+              >
                 View Enrolment
               </button>
             </div>
@@ -98,16 +140,23 @@
         </article>
       </div>
 
+      <!-- TEACHER CHALLENGE -->
       <section class="teachers-panel">
         <div class="section-heading">
           <div>
-            <h2>Teachers</h2>
-            <p>Select a teacher to retrieve every lesson they teach from the backend.</p>
+            <h2>Choose a Teacher</h2>
+            <p>
+              Select a teacher to see the lessons they teach.
+              You can apply for those lessons directly here.
+            </p>
           </div>
           <span class="challenge-badge">Teacher challenge</span>
         </div>
 
-        <select v-model="selectedTeacherId" @change="loadTeacherLessons">
+        <select
+          v-model="selectedTeacherId"
+          @change="loadTeacherLessons"
+        >
           <option value="">Choose a teacher</option>
           <option
             v-for="teacher in teachers"
@@ -118,39 +167,114 @@
           </option>
         </select>
 
-        <p class="status" v-if="teacherLoading">Loading teacher lessons...</p>
-        <p class="error" v-if="teacherError">{{ teacherError }}</p>
+        <p class="status" v-if="teacherLoading">
+          Loading teacher lessons...
+        </p>
 
-        <div v-if="selectedTeacher && !teacherLoading" class="teacher-summary">
-          <strong>{{ selectedTeacher.firstName }} {{ selectedTeacher.lastName }}</strong>
+        <p class="error" v-if="teacherError">
+          {{ teacherError }}
+        </p>
+
+        <div
+          v-if="selectedTeacher && !teacherLoading"
+          class="teacher-summary"
+        >
+          <strong>
+            {{ selectedTeacher.firstName }}
+            {{ selectedTeacher.lastName }}
+          </strong>
           teaches {{ teacherLessons.length }} lesson(s).
         </div>
 
-        <div class="teacher-grid" v-if="teacherLessons.length">
-          <article class="teacher-lesson" v-for="lesson in teacherLessons" :key="lesson._id">
-            <strong>{{ lesson.topic }}</strong>
-            <span>{{ lesson.location }}</span>
-            <span>£{{ lesson.price }}</span>
-            <span>{{ lesson.space }} spaces left</span>
+        <div
+          class="lesson-grid teacher-grid"
+          v-if="teacherLessons.length"
+        >
+          <article
+            class="lesson-card"
+            v-for="lesson in teacherLessons"
+            :key="lesson._id"
+          >
+            <img
+              :src="imageUrl(lesson.image)"
+              :alt="lesson.topic"
+            >
+
+            <div class="lesson-body">
+              <div class="card-heading">
+                <h3>{{ lesson.topic }}</h3>
+                <span class="space-badge">
+                  {{ lesson.space }} spaces
+                </span>
+              </div>
+
+              <p><strong>Location:</strong> {{ lesson.location }}</p>
+              <p><strong>Price:</strong> £{{ lesson.price }}</p>
+
+              <div
+                class="enrolment-box"
+                v-if="enrolment[lesson._id] !== undefined"
+              >
+                <strong>Purchased spaces:</strong>
+                {{ enrolment[lesson._id] }}
+              </div>
+
+              <div class="card-actions">
+                <button
+                  @click="addToCart(lesson)"
+                  :disabled="lesson.space <= 0"
+                >
+                  {{ lesson.space > 0 ? 'Apply / Add to Cart' : 'Sold Out' }}
+                </button>
+
+                <button
+                  class="secondary"
+                  @click="loadEnrolment(lesson._id)"
+                >
+                  View Enrolment
+                </button>
+              </div>
+            </div>
           </article>
         </div>
 
-        <p class="empty-note" v-else-if="selectedTeacherId && !teacherLoading && !teacherError">
+        <p
+          class="empty-note"
+          v-else-if="selectedTeacherId && !teacherLoading && !teacherError"
+        >
           No linked lessons were returned for this teacher.
         </p>
       </section>
     </section>
 
-    <section v-else class="cart-page">
+    <!-- CART PAGE -->
+    <section v-else-if="showCart" class="cart-page">
       <h2>Shopping Cart</h2>
 
       <div class="cart-list">
-        <div class="cart-item" v-for="(item,index) in cart" :key="`${item._id}-${index}`">
-          <div>
-            <strong>{{ item.topic }}</strong>
-            <small>{{ item.location }} · £{{ item.price }}</small>
+        <div
+          class="cart-item"
+          v-for="(item,index) in cart"
+          :key="`${item._id}-${index}`"
+        >
+          <div class="cart-item-details">
+            <img
+              class="cart-thumb"
+              :src="imageUrl(item.image)"
+              :alt="item.topic"
+            >
+            <div>
+              <strong>{{ item.topic }}</strong>
+              <small>{{ item.location }} · £{{ item.price }}</small>
+            </div>
           </div>
-          <button class="danger" @click="removeFromCart(index)">Remove</button>
+
+          <button
+            class="danger"
+            @click="removeFromCart(index)"
+          >
+            Remove
+          </button>
         </div>
       </div>
 
@@ -159,24 +283,120 @@
 
         <label>
           Name
-          <input v-model.trim="customerName" placeholder="Letters only">
+          <input
+            v-model.trim="customerName"
+            placeholder="Letters only"
+          >
         </label>
-        <small :class="validName ? 'valid' : 'invalid'">{{ nameMessage }}</small>
+        <small :class="validName ? 'valid' : 'invalid'">
+          {{ nameMessage }}
+        </small>
 
         <label>
           Phone
-          <input v-model.trim="customerPhone" placeholder="Numbers only">
+          <input
+            v-model.trim="customerPhone"
+            placeholder="Numbers only"
+          >
         </label>
-        <small :class="validPhone ? 'valid' : 'invalid'">{{ phoneMessage }}</small>
+        <small :class="validPhone ? 'valid' : 'invalid'">
+          {{ phoneMessage }}
+        </small>
 
         <p><strong>Total:</strong> £{{ cartTotal }}</p>
 
-        <button @click="checkout" :disabled="!canCheckout || submitting">
+        <button
+          @click="checkout"
+          :disabled="!canCheckout || submitting"
+        >
           {{ submitting ? 'Submitting...' : 'Checkout' }}
         </button>
 
-        <p class="success" v-if="confirmationMessage">{{ confirmationMessage }}</p>
-        <p class="error" v-if="errorMessage">{{ errorMessage }}</p>
+        <p class="success" v-if="confirmationMessage">
+          {{ confirmationMessage }}
+        </p>
+
+        <p class="error" v-if="errorMessage">
+          {{ errorMessage }}
+        </p>
+      </div>
+    </section>
+
+    <!-- MY ENROLMENTS PAGE -->
+    <section v-else class="enrolments-page">
+      <div class="section-heading">
+        <div>
+          <h2>My Enrolments</h2>
+          <p>
+            Lessons purchased from this browser are listed here.
+            De-enrolling restores one space to the lesson.
+          </p>
+        </div>
+        <span class="challenge-badge">Enrolment challenge</span>
+      </div>
+
+      <div class="challenge-note">
+        <strong>Backend enrolment:</strong>
+        each lesson can still query the required
+        <code>GET /enrolment/:lessonid</code> route to show total purchased spaces.
+      </div>
+
+      <p class="success" v-if="enrolmentMessage">
+        {{ enrolmentMessage }}
+      </p>
+
+      <p class="error" v-if="errorMessage">
+        {{ errorMessage }}
+      </p>
+
+      <div
+        class="lesson-grid"
+        v-if="myEnrolments.length"
+      >
+        <article
+          class="lesson-card"
+          v-for="item in myEnrolments"
+          :key="`${item.orderId}-${item.lessonId}`"
+        >
+          <img
+            :src="imageUrl(item.image)"
+            :alt="item.topic"
+          >
+
+          <div class="lesson-body">
+            <div class="card-heading">
+              <h3>{{ item.topic }}</h3>
+              <span class="space-badge">
+                {{ item.quantity }} enrolled
+              </span>
+            </div>
+
+            <p><strong>Location:</strong> {{ item.location }}</p>
+            <p><strong>Price:</strong> £{{ item.price }}</p>
+
+            <button
+              class="danger full-button"
+              @click="deEnrol(item)"
+              :disabled="deEnrolling"
+            >
+              {{ deEnrolling ? 'Updating...' : 'De-enrol one space' }}
+            </button>
+          </div>
+        </article>
+      </div>
+
+      <div
+        class="empty-enrolments"
+        v-else
+      >
+        <h3>No enrolments yet</h3>
+        <p>
+          Add lessons to your cart and complete checkout.
+          Your purchased lessons will appear here.
+        </p>
+        <button @click="showEnrolments = false">
+          Browse Lessons
+        </button>
       </div>
     </section>
   </main>
