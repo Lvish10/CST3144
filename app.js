@@ -11,7 +11,9 @@ const app = Vue.createApp({
       teachers: [],
       teacherLessons: [],
       enrolment: {},
+      myEnrolments: [],
       showCart: false,
+      showEnrolments: false,
       searchText: '',
       sortBy: 'topic',
       sortOrder: 'asc',
@@ -20,10 +22,12 @@ const app = Vue.createApp({
       customerPhone: '',
       loading: false,
       submitting: false,
+      deEnrolling: false,
       teacherLoading: false,
       errorMessage: '',
       teacherError: '',
-      confirmationMessage: ''
+      confirmationMessage: '',
+      enrolmentMessage: ''
     };
   },
 
@@ -73,8 +77,16 @@ const app = Vue.createApp({
       );
     },
 
+    myEnrolmentCount() {
+      return this.myEnrolments.reduce(
+        (total, item) => total + Number(item.quantity || 0),
+        0
+      );
+    },
+
     nameMessage() {
       if (!this.customerName) return 'Enter your name';
+
       return this.validName
         ? 'Valid name'
         : 'Use letters and spaces only';
@@ -82,6 +94,7 @@ const app = Vue.createApp({
 
     phoneMessage() {
       if (!this.customerPhone) return 'Enter your phone number';
+
       return this.validPhone
         ? 'Valid phone'
         : 'Use numbers only';
@@ -91,6 +104,37 @@ const app = Vue.createApp({
   methods: {
     imageUrl(name) {
       return `${API_BASE_URL}/images/${name}`;
+    },
+
+    saveMyEnrolments() {
+      localStorage.setItem(
+        'afterClassMyEnrolments',
+        JSON.stringify(this.myEnrolments)
+      );
+    },
+
+    loadMyEnrolments() {
+      try {
+        const saved = localStorage.getItem('afterClassMyEnrolments');
+        this.myEnrolments = saved ? JSON.parse(saved) : [];
+      } catch {
+        this.myEnrolments = [];
+      }
+    },
+
+    changeDisplayedSpace(lessonId, amount) {
+      const lists = [this.lessons, this.teacherLessons];
+
+      lists.forEach(list => {
+        const lesson = list.find(item => item._id === lessonId);
+
+        if (lesson) {
+          lesson.space = Math.max(
+            0,
+            Math.min(5, Number(lesson.space) + amount)
+          );
+        }
+      });
     },
 
     async loadLessons() {
@@ -146,19 +190,13 @@ const app = Vue.createApp({
       if (lesson.space <= 0) return;
 
       this.cart.push({ ...lesson });
-      lesson.space -= 1;
+      this.changeDisplayedSpace(lesson._id, -1);
     },
 
     removeFromCart(index) {
       const removed = this.cart[index];
-      const lesson = this.lessons.find(
-        item => item._id === removed._id
-      );
 
-      if (lesson) {
-        lesson.space += 1;
-      }
-
+      this.changeDisplayedSpace(removed._id, 1);
       this.cart.splice(index, 1);
 
       if (!this.cart.length) {
@@ -167,8 +205,21 @@ const app = Vue.createApp({
     },
 
     toggleCart() {
-      if (this.cart.length) {
-        this.showCart = !this.showCart;
+      if (!this.cart.length) return;
+
+      this.showCart = !this.showCart;
+
+      if (this.showCart) {
+        this.showEnrolments = false;
+      }
+    },
+
+    toggleEnrolments() {
+      this.showEnrolments = !this.showEnrolments;
+
+      if (this.showEnrolments) {
+        this.showCart = false;
+        this.enrolmentMessage = '';
       }
     },
 
@@ -242,21 +293,33 @@ const app = Vue.createApp({
       this.confirmationMessage = '';
 
       try {
-        const counts = {};
+        const groups = {};
 
         this.cart.forEach(item => {
-          counts[item._id] = (counts[item._id] || 0) + 1;
+          if (!groups[item._id]) {
+            groups[item._id] = {
+              lesson: item,
+              quantity: 0,
+              originalSpace: Number(item.space)
+            };
+          }
+
+          groups[item._id].quantity += 1;
+          groups[item._id].originalSpace = Math.max(
+            groups[item._id].originalSpace,
+            Number(item.space)
+          );
         });
 
         const order = {
           name: this.customerName,
           phone: this.customerPhone,
-          lessonIDs: Object.keys(counts),
+          lessonIDs: Object.keys(groups),
           numberOfSpaces: this.cart.length,
-          items: Object.entries(counts).map(
-            ([lessonId, quantity]) => ({
+          items: Object.entries(groups).map(
+            ([lessonId, group]) => ({
               lessonId,
-              quantity
+              quantity: group.quantity
             })
           )
         };
@@ -276,9 +339,12 @@ const app = Vue.createApp({
           throw new Error('Could not save the order');
         }
 
-        for (const lessonId of Object.keys(counts)) {
-          const lesson = this.lessons.find(
-            item => item._id === lessonId
+        const orderResult = await orderResponse.json();
+
+        for (const [lessonId, group] of Object.entries(groups)) {
+          const remainingSpace = Math.max(
+            0,
+            group.originalSpace - group.quantity
           );
 
           const updateResponse = await fetch(
@@ -289,7 +355,7 @@ const app = Vue.createApp({
                 'Content-Type': 'application/json'
               },
               body: JSON.stringify({
-                space: lesson.space
+                space: remainingSpace
               })
             }
           );
@@ -299,25 +365,103 @@ const app = Vue.createApp({
               'Order saved but lesson space update failed'
             );
           }
+
+          this.myEnrolments.push({
+            orderId: orderResult.orderId,
+            lessonId,
+            topic: group.lesson.topic,
+            location: group.lesson.location,
+            price: group.lesson.price,
+            image: group.lesson.image,
+            quantity: group.quantity
+          });
         }
 
+        this.saveMyEnrolments();
+
         this.confirmationMessage =
-          'Order submitted successfully. Your selected lesson spaces have been saved.';
+          'Order submitted successfully. Your lessons are now shown under My Enrolments.';
 
         this.cart = [];
         this.customerName = '';
         this.customerPhone = '';
 
         await this.loadLessons();
+
+        if (this.selectedTeacherId) {
+          await this.loadTeacherLessons();
+        }
+
+        this.showCart = false;
+        this.showEnrolments = true;
       } catch (error) {
         this.errorMessage = error.message;
       } finally {
         this.submitting = false;
       }
+    },
+
+    async deEnrol(item) {
+      this.deEnrolling = true;
+      this.errorMessage = '';
+      this.enrolmentMessage = '';
+
+      try {
+        const response = await fetch(
+          `${API_BASE_URL}/enrolments/${item.orderId}/${item.lessonId}`,
+          {
+            method: 'DELETE'
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error('Could not de-enrol from this lesson');
+        }
+
+        const savedItem = this.myEnrolments.find(
+          enrolmentItem =>
+            enrolmentItem.orderId === item.orderId &&
+            enrolmentItem.lessonId === item.lessonId
+        );
+
+        if (savedItem) {
+          savedItem.quantity -= 1;
+
+          if (savedItem.quantity <= 0) {
+            this.myEnrolments = this.myEnrolments.filter(
+              enrolmentItem =>
+                !(
+                  enrolmentItem.orderId === item.orderId &&
+                  enrolmentItem.lessonId === item.lessonId
+                )
+            );
+          }
+        }
+
+        this.saveMyEnrolments();
+
+        await this.loadLessons();
+
+        if (this.selectedTeacherId) {
+          await this.loadTeacherLessons();
+        }
+
+        await this.loadEnrolment(item.lessonId);
+
+        this.enrolmentMessage =
+          'De-enrolled successfully. One space is available again in the lesson catalogue.';
+
+        this.showEnrolments = false;
+      } catch (error) {
+        this.errorMessage = error.message;
+      } finally {
+        this.deEnrolling = false;
+      }
     }
   },
 
   mounted() {
+    this.loadMyEnrolments();
     this.loadLessons();
     this.loadTeachers();
   }
