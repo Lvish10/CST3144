@@ -20,7 +20,7 @@
         class="secondary light-button"
         @click="toggleEnrolments"
       >
-        {{ showEnrolments ? 'Back to lessons' : `My Enrolments (${myEnrolmentCount})` }}
+        {{ showEnrolments ? 'Back to lessons' : (enrolmentsLoaded ? `My Enrolments (${myEnrolmentCount})` : 'My Enrolments') }}
       </button>
 
       <button
