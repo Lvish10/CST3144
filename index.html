@@ -319,10 +319,27 @@
         <div>
           <h2>My Enrolments</h2>
           <p>
-            Lessons purchased from this browser are listed here.
+            Enter the phone number used at checkout to load your enrolments.
             De-enrolling restores one space to the lesson.
           </p>
         </div>
+      </div>
+
+      <div class="enrolment-lookup">
+        <label>
+          Phone number used at checkout
+          <input
+            v-model.trim="enrolmentLookupPhone"
+            @keyup.enter="loadMyEnrolments"
+            placeholder="e.g. 59001234"
+          >
+        </label>
+        <button
+          @click="loadMyEnrolments"
+          :disabled="enrolmentLoading || !enrolmentLookupPhone"
+        >
+          {{ enrolmentLoading ? 'Loading...' : 'Load My Enrolments' }}
+        </button>
       </div>
 
       <p class="success" v-if="enrolmentMessage">
