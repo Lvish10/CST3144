@@ -7,6 +7,10 @@ const app = Vue.createApp({
   data() {
     return {
       lessons: [],
+      lessonCache: {},
+      lessonRequest: 0,
+      teacherRequest: 0,
+      pendingCheckout: null,
       cart: [],
       teachers: [],
       teacherLessons: [],
@@ -146,6 +150,7 @@ const app = Vue.createApp({
     },
 
     backToLessons() {
+      if (this.submitting || this.pendingCheckout) return;
       this.sendClientEvent(
         'click',
         'Browse Lessons clicked',
@@ -153,6 +158,7 @@ const app = Vue.createApp({
       );
 
       this.showEnrolments = false;
+      this.showCart = false;
 
       this.sendClientEvent(
         'navigation',
@@ -211,22 +217,27 @@ const app = Vue.createApp({
       }
     },
 
-    changeDisplayedSpace(lessonId, amount) {
-      const lists = [this.lessons, this.teacherLessons];
-
-      lists.forEach(list => {
-        const lesson = list.find(item => item._id === lessonId);
-
-        if (lesson) {
-          lesson.space = Math.max(
-            0,
-            Math.min(5, Number(lesson.space) + amount)
-          );
+    prepareLessons(rows) {
+      // Both views share each lesson object. Server stock excludes this cart.
+      return rows.map(row => {
+        const selected = this.cart.filter(item => item._id === row._id).length;
+        const values = { ...row, space: Math.max(0, Number(row.space) - selected) };
+        if (this.lessonCache[row._id]) {
+          Object.assign(this.lessonCache[row._id], values);
+        } else {
+          this.lessonCache[row._id] = values;
         }
+        return this.lessonCache[row._id];
       });
     },
 
+    changeDisplayedSpace(lessonId, amount) {
+      const lesson = this.lessonCache[lessonId];
+      if (lesson) lesson.space = Math.max(0, Number(lesson.space) + amount);
+    },
+
     async loadLessons() {
+      const request = ++this.lessonRequest;
       this.loading = true;
       this.errorMessage = '';
 
@@ -237,11 +248,12 @@ const app = Vue.createApp({
           throw new Error('Could not load lessons');
         }
 
-        this.lessons = await response.json();
+        const rows = await response.json();
+        if (request === this.lessonRequest) this.lessons = this.prepareLessons(rows);
       } catch (error) {
-        this.errorMessage = error.message;
+        if (request === this.lessonRequest) this.errorMessage = error.message;
       } finally {
-        this.loading = false;
+        if (request === this.lessonRequest) this.loading = false;
       }
     },
 
@@ -261,6 +273,7 @@ const app = Vue.createApp({
     },
 
     async searchLessons() {
+      clearTimeout(this.searchTimer);
       this.sendClientEvent(
         'search',
         'Search requested',
@@ -272,6 +285,7 @@ const app = Vue.createApp({
         return this.loadLessons();
       }
 
+      const request = ++this.lessonRequest;
       this.loading = true;
       this.errorMessage = '';
 
@@ -284,11 +298,12 @@ const app = Vue.createApp({
           throw new Error('Search failed');
         }
 
-        this.lessons = await response.json();
+        const rows = await response.json();
+        if (request === this.lessonRequest) this.lessons = this.prepareLessons(rows);
       } catch (error) {
-        this.errorMessage = error.message;
+        if (request === this.lessonRequest) this.errorMessage = error.message;
       } finally {
-        this.loading = false;
+        if (request === this.lessonRequest) this.loading = false;
       }
     },
 
@@ -300,10 +315,12 @@ const app = Vue.createApp({
       );
 
       this.searchText = '';
-      this.loadLessons();
+      clearTimeout(this.searchTimer);
+      return this.loadLessons();
     },
 
     addToCart(lesson) {
+      if (this.submitting || this.pendingCheckout) return;
       this.sendClientEvent(
         'click',
         'Add to Cart clicked',
@@ -333,6 +350,7 @@ const app = Vue.createApp({
     },
 
     removeFromCart(index) {
+      if (this.submitting || this.pendingCheckout) return;
       const removed = this.cart[index];
 
       this.sendClientEvent(
@@ -358,6 +376,7 @@ const app = Vue.createApp({
     },
 
     toggleCart() {
+      if (this.submitting || this.pendingCheckout) return;
       this.sendClientEvent(
         'click',
         'Cart button clicked',
@@ -381,6 +400,7 @@ const app = Vue.createApp({
     },
 
     toggleEnrolments() {
+      if (this.submitting || this.pendingCheckout) return;
       this.sendClientEvent(
         'click',
         'My Enrolments button clicked',
@@ -418,6 +438,7 @@ const app = Vue.createApp({
     },
 
     async loadTeacherLessons() {
+      const request = ++this.teacherRequest;
       this.sendClientEvent(
         'change',
         'Teacher selection changed',
@@ -429,6 +450,7 @@ const app = Vue.createApp({
       this.teacherError = '';
 
       if (!this.selectedTeacherId) {
+        this.teacherLoading = false;
         return;
       }
 
@@ -443,7 +465,9 @@ const app = Vue.createApp({
           throw new Error('Could not load teacher lessons');
         }
 
-        this.teacherLessons = await response.json();
+        const rows = await response.json();
+        if (request !== this.teacherRequest) return;
+        this.teacherLessons = this.prepareLessons(rows);
 
         this.sendClientEvent(
           'success',
@@ -452,9 +476,9 @@ const app = Vue.createApp({
           { lessonCount: this.teacherLessons.length }
         );
       } catch (error) {
-        this.teacherError = error.message;
+        if (request === this.teacherRequest) this.teacherError = error.message;
       } finally {
-        this.teacherLoading = false;
+        if (request === this.teacherRequest) this.teacherLoading = false;
       }
     },
 
@@ -499,76 +523,66 @@ const app = Vue.createApp({
         { cartCount: this.cart.length, validationPassed: this.canCheckout }
       );
 
-      if (!this.canCheckout) return;
+      if (!this.canCheckout || this.submitting) return;
 
       this.submitting = true;
       this.errorMessage = '';
       this.confirmationMessage = '';
 
       try {
-        const groups = {};
-
-        this.cart.forEach(item => {
-          if (!groups[item._id]) {
-            groups[item._id] = {
-              lesson: item,
-              quantity: 0,
-              originalSpace: Number(item.space)
-            };
-          }
-
-          groups[item._id].quantity += 1;
-          groups[item._id].originalSpace = Math.max(
-            groups[item._id].originalSpace,
-            Number(item.space)
-          );
-        });
-
-        const order = {
-          name: this.customerName,
-          phone: this.customerPhone,
-          lessonIDs: Object.keys(groups),
-          numberOfSpaces: this.cart.length,
-          items: Object.entries(groups).map(
-            ([lessonId, group]) => ({
-              lessonId,
-              quantity: group.quantity
-            })
-          )
-        };
-
-        const orderResponse = await fetch(
-          `${API_BASE_URL}/orders`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(order)
-          }
-        );
-
-        if (!orderResponse.ok) {
-          throw new Error('Could not save the order');
+        if (!this.pendingCheckout) {
+          const groups = {};
+          this.cart.forEach(item => {
+            groups[item._id] = (groups[item._id] || 0) + 1;
+          });
+          // Read current stock, including lessons hidden by the search results.
+          const stockResponse = await fetch(`${API_BASE_URL}/lessons`);
+          if (!stockResponse.ok) throw new Error('Could not check lesson availability');
+          const stock = await stockResponse.json();
+          const updates = Object.entries(groups).map(([lessonId, quantity]) => {
+            const lesson = stock.find(item => item._id === lessonId);
+            if (!lesson || lesson.space < quantity) {
+              throw new Error('A selected lesson has insufficient spaces. Please update your cart.');
+            }
+            return { lessonId, space: lesson.space - quantity, done: false };
+          });
+          const order = {
+            name: this.customerName,
+            phone: this.customerPhone,
+            lessonIDs: Object.keys(groups),
+            numberOfSpaces: this.cart.length,
+            items: Object.entries(groups).map(([lessonId, quantity]) => ({ lessonId, quantity }))
+          };
+          this.pendingCheckout = { order, updates, saved: false, orderId: null };
         }
 
-        const orderResult = await orderResponse.json();
-
-        for (const [lessonId, group] of Object.entries(groups)) {
-          const remainingSpace = Math.max(
-            0,
-            group.originalSpace - group.quantity
+        const pending = this.pendingCheckout;
+        if (!pending.saved) {
+          const orderResponse = await fetch(
+            `${API_BASE_URL}/orders`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(pending.order)
+            }
           );
+          if (!orderResponse.ok) throw new Error('Could not save the order');
+          pending.saved = true;
+          const orderResult = await orderResponse.json();
+          pending.orderId = orderResult.orderId;
+        }
 
+        for (const update of pending.updates) {
+          if (update.done) continue;
           const updateResponse = await fetch(
-            `${API_BASE_URL}/lessons/${lessonId}`,
+            `${API_BASE_URL}/lessons/${update.lessonId}`,
             {
               method: 'PUT',
               headers: {
                 'Content-Type': 'application/json'
               },
               body: JSON.stringify({
-                space: remainingSpace
+                space: update.space
               })
             }
           );
@@ -578,23 +592,24 @@ const app = Vue.createApp({
               'Order saved but lesson space update failed'
             );
           }
-
+          update.done = true;
         }
 
-        this.enrolmentLookupPhone = this.customerPhone;
-        await this.loadMyEnrolments();
+        this.enrolmentLookupPhone = pending.order.phone;
 
         this.confirmationMessage =
-          'Order submitted successfully. Your lessons are now shown under My Enrolments.';
+          'Order submitted successfully.';
 
         this.sendClientEvent(
           'success',
           'Checkout completed',
           'Checkout',
-          { purchasedSpaces: order.numberOfSpaces, lessonTypes: order.lessonIDs.length }
+          { purchasedSpaces: pending.order.numberOfSpaces, lessonTypes: pending.order.lessonIDs.length }
         );
 
         this.cart = [];
+        this.pendingCheckout = null;
+        this.enrolment = {};
         this.customerName = '';
         this.customerPhone = '';
 
@@ -603,11 +618,13 @@ const app = Vue.createApp({
         if (this.selectedTeacherId) {
           await this.loadTeacherLessons();
         }
+        await this.loadMyEnrolments();
 
         this.showCart = false;
         this.showEnrolments = true;
       } catch (error) {
         this.errorMessage = error.message;
+        if (this.pendingCheckout && !this.pendingCheckout.saved) this.pendingCheckout = null;
 
         this.sendClientEvent(
           'error',
@@ -621,6 +638,7 @@ const app = Vue.createApp({
     },
 
     async deEnrol(item) {
+      if (this.deEnrolling || this.submitting || this.pendingCheckout) return;
       this.sendClientEvent(
         'click',
         'De-enrol button clicked',
@@ -644,6 +662,7 @@ const app = Vue.createApp({
           throw new Error('Could not de-enrol from this lesson');
         }
 
+        this.enrolment = {};
         await this.loadMyEnrolments();
 
         await this.loadLessons();

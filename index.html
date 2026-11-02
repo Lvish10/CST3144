@@ -19,6 +19,7 @@
       <button
         class="secondary light-button"
         @click="toggleEnrolments"
+        :disabled="submitting || pendingCheckout"
       >
         {{ showEnrolments ? 'Back to lessons' : (enrolmentsLoaded ? `My Enrolments (${myEnrolmentCount})` : 'My Enrolments') }}
       </button>
@@ -26,7 +27,7 @@
       <button
         class="cart-button"
         @click="toggleCart"
-        :disabled="cart.length === 0"
+        :disabled="cart.length === 0 || submitting || pendingCheckout"
       >
         {{ showCart ? 'Back to lessons' : `Cart (${cart.length})` }}
       </button>
@@ -34,6 +35,8 @@
   </header>
 
   <main class="container">
+    <p class="success" v-if="confirmationMessage">{{ confirmationMessage }}</p>
+    <p class="success" v-if="enrolmentMessage">{{ enrolmentMessage }}</p>
 
     <section v-if="!showCart && !showEnrolments">
       <div class="intro-card">
@@ -121,7 +124,7 @@
                 @click="addToCart(lesson)"
                 :disabled="lesson.space <= 0"
               >
-                {{ lesson.space > 0 ? 'Add to Cart' : 'Sold Out' }}
+                Add to Cart
               </button>
 
               <button
@@ -217,7 +220,7 @@
                   @click="addToCart(lesson)"
                   :disabled="lesson.space <= 0"
                 >
-                  {{ lesson.space > 0 ? 'Apply / Add to Cart' : 'Sold Out' }}
+                  Apply / Add to Cart
                 </button>
 
                 <button
@@ -264,6 +267,7 @@
           <button
             class="danger"
             @click="removeFromCart(index)"
+            :disabled="submitting || pendingCheckout"
           >
             Remove
           </button>
@@ -277,6 +281,7 @@
           Name
           <input
             v-model.trim="customerName"
+            :disabled="submitting || pendingCheckout"
             placeholder="Letters only"
           >
         </label>
@@ -288,6 +293,7 @@
           Phone
           <input
             v-model.trim="customerPhone"
+            :disabled="submitting || pendingCheckout"
             placeholder="Numbers only"
           >
         </label>
@@ -301,12 +307,8 @@
           @click="checkout"
           :disabled="!canCheckout || submitting"
         >
-          {{ submitting ? 'Submitting...' : 'Checkout' }}
+          {{ submitting ? 'Submitting...' : (pendingCheckout ? 'Retry checkout' : 'Checkout') }}
         </button>
-
-        <p class="success" v-if="confirmationMessage">
-          {{ confirmationMessage }}
-        </p>
 
         <p class="error" v-if="errorMessage">
           {{ errorMessage }}
@@ -341,10 +343,6 @@
           {{ enrolmentLoading ? 'Loading...' : 'Load My Enrolments' }}
         </button>
       </div>
-
-      <p class="success" v-if="enrolmentMessage">
-        {{ enrolmentMessage }}
-      </p>
 
       <p class="error" v-if="errorMessage">
         {{ errorMessage }}
