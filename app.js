@@ -106,11 +106,34 @@ const app = Vue.createApp({
   },
 
   methods: {
+    sendClientEvent(event, action, target, details = {}) {
+      fetch(`${API_BASE_URL}/client-events`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          event,
+          action,
+          target,
+          details
+        })
+      }).catch(() => {
+        // Logging must never interrupt the application.
+      });
+    },
+
     imageUrl(name) {
       return `${API_BASE_URL}/images/${name}`;
     },
 
     async loadMyEnrolments() {
+      this.sendClientEvent(
+        'click',
+        'Load My Enrolments clicked',
+        'My Enrolments lookup'
+      );
+
       this.errorMessage = '';
       this.enrolmentMessage = '';
       this.myEnrolments = [];
@@ -135,6 +158,13 @@ const app = Vue.createApp({
         const data = await response.json();
         this.myEnrolments = data.enrolments;
         this.enrolmentsLoaded = true;
+
+        this.sendClientEvent(
+          'success',
+          'My Enrolments loaded from Atlas',
+          'My Enrolments',
+          { enrolmentEntries: this.myEnrolments.length, totalSpaces: this.myEnrolmentCount }
+        );
 
         if (!this.myEnrolments.length) {
           this.enrolmentMessage =
@@ -182,6 +212,13 @@ const app = Vue.createApp({
     },
 
     queueSearch() {
+      this.sendClientEvent(
+        'input',
+        'User typed in lesson search',
+        'Search box',
+        { searchLength: this.searchText.length }
+      );
+
       clearTimeout(this.searchTimer);
 
       this.searchTimer = setTimeout(() => {
@@ -190,6 +227,13 @@ const app = Vue.createApp({
     },
 
     async searchLessons() {
+      this.sendClientEvent(
+        'search',
+        'Search requested',
+        'Lesson search',
+        { query: this.searchText || '(empty)' }
+      );
+
       if (!this.searchText) {
         return this.loadLessons();
       }
@@ -215,22 +259,64 @@ const app = Vue.createApp({
     },
 
     clearSearch() {
+      this.sendClientEvent(
+        'click',
+        'Search cleared',
+        'Clear button'
+      );
+
       this.searchText = '';
       this.loadLessons();
     },
 
     addToCart(lesson) {
-      if (lesson.space <= 0) return;
+      this.sendClientEvent(
+        'click',
+        'Add to Cart clicked',
+        lesson.topic,
+        { lessonId: lesson._id, availableBefore: lesson.space }
+      );
+
+      if (lesson.space <= 0) {
+        this.sendClientEvent(
+          'blocked',
+          'Add to Cart blocked because lesson is sold out',
+          lesson.topic,
+          { lessonId: lesson._id }
+        );
+        return;
+      }
 
       this.cart.push({ ...lesson });
       this.changeDisplayedSpace(lesson._id, -1);
+
+      this.sendClientEvent(
+        'cart',
+        'Lesson added to cart',
+        lesson.topic,
+        { cartCount: this.cart.length }
+      );
     },
 
     removeFromCart(index) {
       const removed = this.cart[index];
 
+      this.sendClientEvent(
+        'click',
+        'Remove from Cart clicked',
+        removed.topic,
+        { lessonId: removed._id }
+      );
+
       this.changeDisplayedSpace(removed._id, 1);
       this.cart.splice(index, 1);
+
+      this.sendClientEvent(
+        'cart',
+        'Lesson removed from cart',
+        removed.topic,
+        { cartCount: this.cart.length }
+      );
 
       if (!this.cart.length) {
         this.showCart = false;
@@ -238,6 +324,13 @@ const app = Vue.createApp({
     },
 
     toggleCart() {
+      this.sendClientEvent(
+        'click',
+        'Cart button clicked',
+        'Cart button',
+        { cartCount: this.cart.length }
+      );
+
       if (!this.cart.length) return;
 
       this.showCart = !this.showCart;
@@ -245,15 +338,33 @@ const app = Vue.createApp({
       if (this.showCart) {
         this.showEnrolments = false;
       }
+
+      this.sendClientEvent(
+        'navigation',
+        this.showCart ? 'Cart page opened' : 'Lesson page opened',
+        'Main view'
+      );
     },
 
     toggleEnrolments() {
+      this.sendClientEvent(
+        'click',
+        'My Enrolments button clicked',
+        'My Enrolments button'
+      );
+
       this.showEnrolments = !this.showEnrolments;
 
       if (this.showEnrolments) {
         this.showCart = false;
         this.enrolmentMessage = '';
       }
+
+      this.sendClientEvent(
+        'navigation',
+        this.showEnrolments ? 'My Enrolments page opened' : 'Lesson page opened',
+        'Main view'
+      );
     },
 
     async loadTeachers() {
@@ -273,6 +384,13 @@ const app = Vue.createApp({
     },
 
     async loadTeacherLessons() {
+      this.sendClientEvent(
+        'change',
+        'Teacher selection changed',
+        'Teacher dropdown',
+        { teacherId: this.selectedTeacherId || '(none)' }
+      );
+
       this.teacherLessons = [];
       this.teacherError = '';
 
@@ -292,6 +410,13 @@ const app = Vue.createApp({
         }
 
         this.teacherLessons = await response.json();
+
+        this.sendClientEvent(
+          'success',
+          'Teacher lessons loaded',
+          'Teacher section',
+          { lessonCount: this.teacherLessons.length }
+        );
       } catch (error) {
         this.teacherError = error.message;
       } finally {
@@ -300,6 +425,13 @@ const app = Vue.createApp({
     },
 
     async loadEnrolment(id) {
+      this.sendClientEvent(
+        'click',
+        'View Enrolment clicked',
+        'Lesson enrolment',
+        { lessonId: id }
+      );
+
       this.errorMessage = '';
 
       try {
@@ -313,12 +445,26 @@ const app = Vue.createApp({
 
         const data = await response.json();
         this.enrolment[id] = data.enrolment;
+
+        this.sendClientEvent(
+          'success',
+          'Enrolment total displayed',
+          'Lesson enrolment',
+          { lessonId: id, enrolment: data.enrolment }
+        );
       } catch (error) {
         this.errorMessage = error.message;
       }
     },
 
     async checkout() {
+      this.sendClientEvent(
+        'click',
+        'Checkout button clicked',
+        'Checkout',
+        { cartCount: this.cart.length, validationPassed: this.canCheckout }
+      );
+
       if (!this.canCheckout) return;
 
       this.submitting = true;
@@ -407,6 +553,13 @@ const app = Vue.createApp({
         this.confirmationMessage =
           'Order submitted successfully. Your lessons are now shown under My Enrolments.';
 
+        this.sendClientEvent(
+          'success',
+          'Checkout completed',
+          'Checkout',
+          { purchasedSpaces: order.numberOfSpaces, lessonTypes: order.lessonIDs.length }
+        );
+
         this.cart = [];
         this.customerName = '';
         this.customerPhone = '';
@@ -421,12 +574,26 @@ const app = Vue.createApp({
         this.showEnrolments = true;
       } catch (error) {
         this.errorMessage = error.message;
+
+        this.sendClientEvent(
+          'error',
+          'Checkout failed',
+          'Checkout',
+          { message: error.message }
+        );
       } finally {
         this.submitting = false;
       }
     },
 
     async deEnrol(item) {
+      this.sendClientEvent(
+        'click',
+        'De-enrol button clicked',
+        item.topic,
+        { lessonId: item.lessonId, quantityBefore: item.quantity }
+      );
+
       this.deEnrolling = true;
       this.errorMessage = '';
       this.enrolmentMessage = '';
@@ -456,6 +623,13 @@ const app = Vue.createApp({
         this.enrolmentMessage =
           'De-enrolled successfully. One space is available again in the lesson catalogue.';
 
+        this.sendClientEvent(
+          'success',
+          'De-enrol completed',
+          item.topic,
+          { lessonId: item.lessonId }
+        );
+
         this.showEnrolments = false;
       } catch (error) {
         this.errorMessage = error.message;
@@ -466,6 +640,13 @@ const app = Vue.createApp({
   },
 
   mounted() {
+    this.sendClientEvent(
+      'page',
+      'Frontend loaded',
+      'AfterClass application',
+      { host: location.hostname }
+    );
+
     this.loadLessons();
     this.loadTeachers();
   }
