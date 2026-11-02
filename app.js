@@ -127,6 +127,40 @@ const app = Vue.createApp({
       return `${API_BASE_URL}/images/${name}`;
     },
 
+    logSortChange() {
+      this.sendClientEvent(
+        'change',
+        'Sort field changed',
+        'Sort by',
+        { sortBy: this.sortBy }
+      );
+    },
+
+    logSortOrderChange() {
+      this.sendClientEvent(
+        'change',
+        'Sort order changed',
+        'Sort order',
+        { sortOrder: this.sortOrder }
+      );
+    },
+
+    backToLessons() {
+      this.sendClientEvent(
+        'click',
+        'Browse Lessons clicked',
+        'Browse Lessons button'
+      );
+
+      this.showEnrolments = false;
+
+      this.sendClientEvent(
+        'navigation',
+        'Lesson page opened',
+        'Main view'
+      );
+    },
+
     async loadMyEnrolments() {
       this.sendClientEvent(
         'click',
