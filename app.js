@@ -27,7 +27,8 @@ const app = Vue.createApp({
       errorMessage: '',
       teacherError: '',
       confirmationMessage: '',
-      enrolmentMessage: ''
+      enrolmentMessage: '',
+      searchTimer: null
     };
   },
 
@@ -154,6 +155,14 @@ const app = Vue.createApp({
       } finally {
         this.loading = false;
       }
+    },
+
+    queueSearch() {
+      clearTimeout(this.searchTimer);
+
+      this.searchTimer = setTimeout(() => {
+        this.searchLessons();
+      }, 350);
     },
 
     async searchLessons() {
