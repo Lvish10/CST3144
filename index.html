@@ -48,6 +48,7 @@
             Search all lesson details
             <input
               v-model.trim="searchText"
+              @input="queueSearch"
               @keyup.enter="searchLessons"
               placeholder="Try Math, Hendon, 100 or 5..."
             >
@@ -82,11 +83,6 @@
             </select>
           </label>
         </div>
-      </div>
-
-      <div class="challenge-note">
-        <strong>Search challenge:</strong>
-        one search box checks subject, location, price and availability on the Express/MongoDB backend.
       </div>
 
       <p class="status" v-if="loading">Loading...</p>
@@ -150,7 +146,6 @@
               You can apply for those lessons directly here.
             </p>
           </div>
-          <span class="challenge-badge">Teacher challenge</span>
         </div>
 
         <select
@@ -332,13 +327,6 @@
             De-enrolling restores one space to the lesson.
           </p>
         </div>
-        <span class="challenge-badge">Enrolment challenge</span>
-      </div>
-
-      <div class="challenge-note">
-        <strong>Backend enrolment:</strong>
-        each lesson can still query the required
-        <code>GET /enrolment/:lessonid</code> route to show total purchased spaces.
       </div>
 
       <p class="success" v-if="enrolmentMessage">
