@@ -12,6 +12,7 @@ const app = Vue.createApp({
       teacherLessons: [],
       enrolment: {},
       myEnrolments: [],
+      enrolmentLookupPhone: '',
       showCart: false,
       showEnrolments: false,
       searchText: '',
@@ -24,6 +25,7 @@ const app = Vue.createApp({
       submitting: false,
       deEnrolling: false,
       teacherLoading: false,
+      enrolmentLoading: false,
       errorMessage: '',
       teacherError: '',
       confirmationMessage: '',
@@ -107,19 +109,38 @@ const app = Vue.createApp({
       return `${API_BASE_URL}/images/${name}`;
     },
 
-    saveMyEnrolments() {
-      localStorage.setItem(
-        'afterClassMyEnrolments',
-        JSON.stringify(this.myEnrolments)
-      );
-    },
+    async loadMyEnrolments() {
+      this.errorMessage = '';
+      this.enrolmentMessage = '';
+      this.myEnrolments = [];
 
-    loadMyEnrolments() {
+      if (!/^\d+$/.test(this.enrolmentLookupPhone)) {
+        this.errorMessage = 'Enter the phone number used at checkout.';
+        return;
+      }
+
+      this.enrolmentLoading = true;
+
       try {
-        const saved = localStorage.getItem('afterClassMyEnrolments');
-        this.myEnrolments = saved ? JSON.parse(saved) : [];
-      } catch {
-        this.myEnrolments = [];
+        const response = await fetch(
+          `${API_BASE_URL}/my-enrolments?phone=${encodeURIComponent(this.enrolmentLookupPhone)}`
+        );
+
+        if (!response.ok) {
+          throw new Error('Could not load enrolments');
+        }
+
+        const data = await response.json();
+        this.myEnrolments = data.enrolments;
+
+        if (!this.myEnrolments.length) {
+          this.enrolmentMessage =
+            'No active enrolments were found for this phone number.';
+        }
+      } catch (error) {
+        this.errorMessage = error.message;
+      } finally {
+        this.enrolmentLoading = false;
       }
     },
 
@@ -375,18 +396,10 @@ const app = Vue.createApp({
             );
           }
 
-          this.myEnrolments.push({
-            orderId: orderResult.orderId,
-            lessonId,
-            topic: group.lesson.topic,
-            location: group.lesson.location,
-            price: group.lesson.price,
-            image: group.lesson.image,
-            quantity: group.quantity
-          });
         }
 
-        this.saveMyEnrolments();
+        this.enrolmentLookupPhone = this.customerPhone;
+        await this.loadMyEnrolments();
 
         this.confirmationMessage =
           'Order submitted successfully. Your lessons are now shown under My Enrolments.';
@@ -427,27 +440,7 @@ const app = Vue.createApp({
           throw new Error('Could not de-enrol from this lesson');
         }
 
-        const savedItem = this.myEnrolments.find(
-          enrolmentItem =>
-            enrolmentItem.orderId === item.orderId &&
-            enrolmentItem.lessonId === item.lessonId
-        );
-
-        if (savedItem) {
-          savedItem.quantity -= 1;
-
-          if (savedItem.quantity <= 0) {
-            this.myEnrolments = this.myEnrolments.filter(
-              enrolmentItem =>
-                !(
-                  enrolmentItem.orderId === item.orderId &&
-                  enrolmentItem.lessonId === item.lessonId
-                )
-            );
-          }
-        }
-
-        this.saveMyEnrolments();
+        await this.loadMyEnrolments();
 
         await this.loadLessons();
 
@@ -470,7 +463,6 @@ const app = Vue.createApp({
   },
 
   mounted() {
-    this.loadMyEnrolments();
     this.loadLessons();
     this.loadTeachers();
   }
