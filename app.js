@@ -26,6 +26,7 @@ const app = Vue.createApp({
       deEnrolling: false,
       teacherLoading: false,
       enrolmentLoading: false,
+      enrolmentsLoaded: false,
       errorMessage: '',
       teacherError: '',
       confirmationMessage: '',
@@ -113,6 +114,7 @@ const app = Vue.createApp({
       this.errorMessage = '';
       this.enrolmentMessage = '';
       this.myEnrolments = [];
+      this.enrolmentsLoaded = false;
 
       if (!/^\d+$/.test(this.enrolmentLookupPhone)) {
         this.errorMessage = 'Enter the phone number used at checkout.';
@@ -132,6 +134,7 @@ const app = Vue.createApp({
 
         const data = await response.json();
         this.myEnrolments = data.enrolments;
+        this.enrolmentsLoaded = true;
 
         if (!this.myEnrolments.length) {
           this.enrolmentMessage =
